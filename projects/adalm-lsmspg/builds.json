@@ -1,10 +1,16 @@
 {
   "maxim": {
-    "iio":  {
+    "iio_max32665": {
       "flags" : "TARGET=max32665"
     },
-    "curvetrace_example":{
+    "curvetrace_example_max32665": {
       "flags": "EXAMPLE=curvetrace_example TARGET=max32665"
+    },
+    "iio_max32655": {
+      "flags" : "TARGET=max32655"
+    },
+    "curvetrace_example_max32655": {
+      "flags": "EXAMPLE=curvetrace_example TARGET=max32655"
     }
   }
 }

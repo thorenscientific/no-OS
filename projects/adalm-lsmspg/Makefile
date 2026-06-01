@@ -1,7 +1,10 @@
 EXAMPLE ?= iio_example
 
-NO_OS_USB_UART = y
 IIOD = y
+
+ifneq ($(findstring max32665,$(TARGET)),)
+NO_OS_USB_UART = y
+endif
 
 include ../../tools/scripts/generic_variables.mk
 

@@ -33,9 +33,12 @@
 *******************************************************************************/
 #include "example.h"
 #include "common_data.h"
+#include "parameters.h"
 #include "no_os_delay.h"
 #include "no_os_print_log.h"
 #include "no_os_uart.h"
+#define uart_write(desc, data, len) \
+	no_os_uart_write(desc, (const uint8_t *)(data), len)
 #include "ad5592r.h"
 #include "ad5593r.h"
 #include "lm75.h"
@@ -48,7 +51,7 @@
     .int_ref = true, \
     .spi_init = &ad5592r_spi_ip, \
     .i2c_init = NULL, \
-    .ss_init = &ad5592r_spi_ss_ip, \
+    .ss_init = AD5592R_SPI_SS_IP, \
     .channel_modes = { \
         CH_MODE_DAC,         /* channel 0 */ \
         CH_MODE_ADC,         /* channel 1 */ \
@@ -193,7 +196,7 @@ static int dac_test_sweep_run(struct no_os_uart_desc *uart_desc,
 	int ret;
 
 	char msg_dac_test[] = "\n\rDAC Test Sweep (verifying DAC functionality):\n\r";
-	no_os_uart_write(uart_desc, msg_dac_test, sizeof(msg_dac_test) - 1);
+	uart_write(uart_desc, msg_dac_test, sizeof(msg_dac_test) - 1);
 
 	for (uint16_t test_val = 0; test_val <= 4095; test_val += 1024) {
 		ret = cfg->write_dac(dev, 2, test_val);
@@ -207,9 +210,10 @@ static int dac_test_sweep_run(struct no_os_uart_desc *uart_desc,
 			float actual_v = (readback_raw * mV_per_lsb) / 1000.0f;
 			sprintf(msg_buf,
 				"  DAC=%u (%.3fV) -> ADC=%u (%.3fV) | diff=%.3fV\n\r",
-				test_val, expected_v, readback_raw, actual_v,
-				actual_v - expected_v);
-			no_os_uart_write(uart_desc, msg_buf, strlen(msg_buf));
+				test_val, (double)expected_v, readback_raw,
+				(double)actual_v,
+				(double)(actual_v - expected_v));
+			uart_write(uart_desc, msg_buf, strlen(msg_buf));
 		}
 	}
 
@@ -296,36 +300,36 @@ static void plot_ascii_graph(struct no_os_uart_desc *uart_desc,
 	no_os_mdelay(100);
 	sprintf(buf, "\r\n\r\n === %s (%s) - %s Curve Tracer (Ic vs Vc) ===\r\n",
 		cfg->device_name, cfg->bus_label, cfg->bjt_label);
-	no_os_uart_write(uart_desc, buf, strlen(buf));
+	uart_write(uart_desc, buf, strlen(buf));
 
 	sprintf(buf, "Y-axis: %s (0 to %.2f mA)\r\n",
-		cfg->abs_current_plot ? "|Ic|" : "Ic", max_i);
-	no_os_uart_write(uart_desc, buf, strlen(buf));
+		cfg->abs_current_plot ? "|Ic|" : "Ic", (double)max_i);
+	uart_write(uart_desc, buf, strlen(buf));
 
-	sprintf(buf, "X-axis: Vc (0 to %.2f V)\r\n\r\n", max_v);
-	no_os_uart_write(uart_desc, buf, strlen(buf));
+	sprintf(buf, "X-axis: Vc (0 to %.2f V)\r\n\r\n", (double)max_v);
+	uart_write(uart_desc, buf, strlen(buf));
 
 	/* Print grid row by row */
 	for (int y = 0; y < GRAPH_HEIGHT + 2; y++) {
-		no_os_uart_write(uart_desc, (uint8_t*)grid[y], GRAPH_WIDTH + 2);
-		no_os_uart_write(uart_desc, (uint8_t*)"\r\n", 2);
+		uart_write(uart_desc, (uint8_t*)grid[y], GRAPH_WIDTH + 2);
+		uart_write(uart_desc, (uint8_t*)"\r\n", 2);
 	}
 
 	/* Print X-axis labels */
 	sprintf(buf, "0.0");
-	no_os_uart_write(uart_desc, (uint8_t*)buf, strlen(buf));
+	uart_write(uart_desc, (uint8_t*)buf, strlen(buf));
 
 	float step = max_v / 5.0f;
 	for (int k = 1; k <= 5; k++) {
-		no_os_uart_write(uart_desc, (uint8_t*)"       ", 7);
+		uart_write(uart_desc, (uint8_t*)"       ", 7);
 		sprintf(buf, "%.2f", (double)(step * k));
-		no_os_uart_write(uart_desc, (uint8_t*)buf, strlen(buf));
+		uart_write(uart_desc, (uint8_t*)buf, strlen(buf));
 	}
-	no_os_uart_write(uart_desc, (uint8_t*)" V\r\n\r\n", 6);
+	uart_write(uart_desc, (uint8_t*)" V\r\n\r\n", 6);
 
 	sprintf(buf, "===== %s Curve Trace Complete =====\n\r\n\r",
 		cfg->device_name);
-	no_os_uart_write(uart_desc, (const uint8_t *)buf, strlen(buf));
+	uart_write(uart_desc, (const uint8_t *)buf, strlen(buf));
 }
 
 /**
@@ -344,7 +348,7 @@ static void output_csv_data(struct no_os_uart_desc *uart_desc,
 	int pos;
 
 	sprintf(buf, "\n\r=== CSV DATA START: %s ===\n\r", cfg->csv_tag);
-	no_os_uart_write(uart_desc, buf, strlen(buf));
+	uart_write(uart_desc, buf, strlen(buf));
 
 	/* Generate CSV column header */
 	pos = 0;
@@ -354,22 +358,22 @@ static void output_csv_data(struct no_os_uart_desc *uart_desc,
 			pos += sprintf(buf + pos, ",");
 	}
 	pos += sprintf(buf + pos, "\n\r");
-	no_os_uart_write(uart_desc, buf, pos);
+	uart_write(uart_desc, buf, pos);
 
 	/* Output all curve data */
 	for (int p = 0; p < NUM_POINTS; p++) {
 		for (int c = 0; c < cfg->csv_curves; c++) {
-			sprintf(buf, "%.4f,%.4f", curve_vcs[c][p],
-				curve_ics[c][p]);
-			no_os_uart_write(uart_desc, buf, strlen(buf));
+			sprintf(buf, "%.4f,%.4f", (double)curve_vcs[c][p],
+				(double)curve_ics[c][p]);
+			uart_write(uart_desc, buf, strlen(buf));
 			if (c < cfg->csv_curves - 1)
-				no_os_uart_write(uart_desc, (uint8_t*)",", 1);
+				uart_write(uart_desc, (uint8_t*)",", 1);
 		}
-		no_os_uart_write(uart_desc, (uint8_t*)"\r\n", 2);
+		uart_write(uart_desc, (uint8_t*)"\r\n", 2);
 	}
 
 	char csv_footer[] = "=== CSV DATA END ===\n\r\n\r";
-	no_os_uart_write(uart_desc, csv_footer, sizeof(csv_footer) - 1);
+	uart_write(uart_desc, csv_footer, sizeof(csv_footer) - 1);
 }
 
 /**
@@ -401,27 +405,39 @@ static int curve_trace_common(struct no_os_uart_desc *uart_desc,
 	/* Print title */
 	sprintf(msg_buf, "\n\r========== %s (%s) %s Curve Tracer ==========\n\r",
 		cfg->device_name, cfg->bus_label, cfg->bjt_label);
-	no_os_uart_write(uart_desc, msg_buf, strlen(msg_buf));
+	uart_write(uart_desc, msg_buf, strlen(msg_buf));
 
 	/* Initialize device */
 	struct ad5592r_init_param ip = cfg->dev_ip;
+
+	sprintf(msg_buf, "SPI device_id=%d, CS=%d, speed=%lu, mode=%d\n\r",
+		ip.spi_init->device_id, ip.spi_init->chip_select,
+		(unsigned long)ip.spi_init->max_speed_hz, ip.spi_init->mode);
+	uart_write(uart_desc, msg_buf, strlen(msg_buf));
+
+	sprintf(msg_buf, "ss_init=%s\n\r",
+		ip.ss_init ? "software SS" : "hardware CS (no software SS)");
+	uart_write(uart_desc, msg_buf, strlen(msg_buf));
+
 	ret = cfg->init(&dev, &ip);
+	sprintf(msg_buf, "%s init returned: %d\n\r", cfg->device_name, (int)ret);
+	uart_write(uart_desc, msg_buf, strlen(msg_buf));
 	if (ret) {
 		sprintf(msg_buf, "Failed to initialize %s (%s)\n\r",
 			cfg->device_name, cfg->bus_label);
-		no_os_uart_write(uart_desc, msg_buf, strlen(msg_buf));
+		uart_write(uart_desc, msg_buf, strlen(msg_buf));
 		goto cleanup;
 	}
 
 	sprintf(msg_buf, "%s (%s) initialized successfully\n\r",
 		cfg->device_name, cfg->bus_label);
-	no_os_uart_write(uart_desc, msg_buf, strlen(msg_buf));
+	uart_write(uart_desc, msg_buf, strlen(msg_buf));
 
 	/* Get reference voltage */
 	ret = ad5592r_get_ref(dev, &vref_mv);
 	if (ret) {
 		char msg_err[] = "Failed to get reference voltage\n\r";
-		no_os_uart_write(uart_desc, msg_err, sizeof(msg_err) - 1);
+		uart_write(uart_desc, msg_err, sizeof(msg_err) - 1);
 		goto cleanup;
 	}
 
@@ -430,8 +446,8 @@ static int curve_trace_common(struct no_os_uart_desc *uart_desc,
 
 	char scale_msg[64];
 	sprintf(scale_msg, "Vref: %u mV, Scale: %.4f mV/LSB\n\r",
-		vref_mv, mV_per_lsb);
-	no_os_uart_write(uart_desc, scale_msg, strlen(scale_msg));
+		vref_mv, (double)mV_per_lsb);
+	uart_write(uart_desc, scale_msg, strlen(scale_msg));
 
 	/* Read temperature from channel 8 */
 	uint16_t temp_raw;
@@ -444,11 +460,11 @@ static int curve_trace_common(struct no_os_uart_desc *uart_desc,
 				    1000.0f; /* Convert mC to C */
 		char temp_msg[64];
 		sprintf(temp_msg, "%s Temperature: %.2f\xc2\xb0C (raw=%u)\n\r",
-			cfg->device_name, temperature, temp_raw);
-		no_os_uart_write(uart_desc, temp_msg, strlen(temp_msg));
+			cfg->device_name, (double)temperature, temp_raw);
+		uart_write(uart_desc, temp_msg, strlen(temp_msg));
 	} else {
 		char temp_err[] = "Failed to read temperature\n\r";
-		no_os_uart_write(uart_desc, temp_err, sizeof(temp_err) - 1);
+		uart_write(uart_desc, temp_err, sizeof(temp_err) - 1);
 	}
 
 	/* Set emitter drive if configured (PNP operation) */
@@ -460,14 +476,14 @@ static int curve_trace_common(struct no_os_uart_desc *uart_desc,
 			sprintf(msg_buf,
 				"Failed to write to DAC channel %u (Emitter)\n\r",
 				cfg->emitter_channel);
-			no_os_uart_write(uart_desc, msg_buf, strlen(msg_buf));
+			uart_write(uart_desc, msg_buf, strlen(msg_buf));
 			goto cleanup;
 		}
 		sprintf(msg_buf,
 			"Emitter drive (CH%u) set to %u counts (%.2f mV)\n\r",
 			cfg->emitter_channel, vedrive_raw,
-			vedrive_raw * mV_per_lsb);
-		no_os_uart_write(uart_desc, msg_buf, strlen(msg_buf));
+			(double)(vedrive_raw * mV_per_lsb));
+		uart_write(uart_desc, msg_buf, strlen(msg_buf));
 	}
 
 	/* Initialize DACs to 500mV */
@@ -476,32 +492,32 @@ static int curve_trace_common(struct no_os_uart_desc *uart_desc,
 	if (cfg->verbose_init) {
 		sprintf(msg_buf,
 			"Initializing Base/Collector DACs to %u counts (%.2f mV)\n\r",
-			dac_value, dac_value * mV_per_lsb);
-		no_os_uart_write(uart_desc, msg_buf, strlen(msg_buf));
+			dac_value, (double)(dac_value * mV_per_lsb));
+		uart_write(uart_desc, msg_buf, strlen(msg_buf));
 	}
 
 	ret = cfg->write_dac(dev, 0, dac_value);
 	if (ret) {
 		char msg_err[] = "Failed to write to DAC channel 0\n\r";
-		no_os_uart_write(uart_desc, msg_err, sizeof(msg_err) - 1);
+		uart_write(uart_desc, msg_err, sizeof(msg_err) - 1);
 		goto cleanup;
 	}
 
 	if (cfg->verbose_init) {
 		char msg_dac0[] = "DAC channel 0 written successfully\n\r";
-		no_os_uart_write(uart_desc, msg_dac0, sizeof(msg_dac0) - 1);
+		uart_write(uart_desc, msg_dac0, sizeof(msg_dac0) - 1);
 	}
 
 	ret = cfg->write_dac(dev, 2, dac_value);
 	if (ret) {
 		char msg_err[] = "Failed to write to DAC channel 2\n\r";
-		no_os_uart_write(uart_desc, msg_err, sizeof(msg_err) - 1);
+		uart_write(uart_desc, msg_err, sizeof(msg_err) - 1);
 		goto cleanup;
 	}
 
 	if (cfg->verbose_init) {
 		char msg_dac2[] = "DAC channel 2 written successfully\n\r";
-		no_os_uart_write(uart_desc, msg_dac2, sizeof(msg_dac2) - 1);
+		uart_write(uart_desc, msg_dac2, sizeof(msg_dac2) - 1);
 
 		/* Verify by reading back channel 2 (DAC+ADC mode) */
 		uint16_t readback_raw;
@@ -513,8 +529,8 @@ static int curve_trace_common(struct no_os_uart_desc *uart_desc,
 					   1000.0f;
 			sprintf(msg_buf,
 				"DAC CH2 readback: raw=%u, voltage=%.4fV\n\r",
-				readback_raw, readback_v);
-			no_os_uart_write(uart_desc, msg_buf, strlen(msg_buf));
+				readback_raw, (double)readback_v);
+			uart_write(uart_desc, msg_buf, strlen(msg_buf));
 		}
 	}
 
@@ -537,7 +553,7 @@ static int curve_trace_common(struct no_os_uart_desc *uart_desc,
 	} else {
 		sprintf(msg_buf, "\n\rStarting curve sweep...\n\r");
 	}
-	no_os_uart_write(uart_desc, msg_buf, strlen(msg_buf));
+	uart_write(uart_desc, msg_buf, strlen(msg_buf));
 
 	/* Sweep base voltage */
 	for (int ci = 0; ci < cfg->num_curves; ci++) {
@@ -548,7 +564,7 @@ static int curve_trace_common(struct no_os_uart_desc *uart_desc,
 		ret = cfg->write_dac(dev, 0, vbdrive_raw);
 		if (ret) {
 			char msg_err[] = "Failed to write to DAC channel 0\n\r";
-			no_os_uart_write(uart_desc, msg_err,
+			uart_write(uart_desc, msg_err,
 					 sizeof(msg_err) - 1);
 			goto cleanup;
 		}
@@ -563,8 +579,8 @@ static int curve_trace_common(struct no_os_uart_desc *uart_desc,
 		float parsed_ib = ib * 1e6;
 		sprintf(curveBuffer,
 			"Base Drive:  %.11f  Volts,  %.10f  uA\n\r",
-			vb_voltage, parsed_ib);
-		no_os_uart_write(uart_desc, curveBuffer, strlen(curveBuffer));
+			(double)vb_voltage, (double)parsed_ib);
+		uart_write(uart_desc, curveBuffer, strlen(curveBuffer));
 
 		/* Sweep collector voltage */
 		for (int pi = 0; pi < NUM_POINTS; pi++) {
@@ -579,7 +595,7 @@ static int curve_trace_common(struct no_os_uart_desc *uart_desc,
 			if (ret) {
 				char msg_err[] =
 					"Failed to write to DAC channel 2\n\r";
-				no_os_uart_write(uart_desc, msg_err,
+				uart_write(uart_desc, msg_err,
 						 sizeof(msg_err) - 1);
 				goto cleanup;
 			}
@@ -592,7 +608,7 @@ static int curve_trace_common(struct no_os_uart_desc *uart_desc,
 			if (ret) {
 				char msg_err[] =
 					"Failed to read ADC channel 1\n\r";
-				no_os_uart_write(uart_desc, msg_err,
+				uart_write(uart_desc, msg_err,
 						 sizeof(msg_err) - 1);
 				goto cleanup;
 			}
@@ -601,7 +617,7 @@ static int curve_trace_common(struct no_os_uart_desc *uart_desc,
 			if (ret) {
 				char msg_err[] =
 					"Failed to read ADC channel 2\n\r";
-				no_os_uart_write(uart_desc, msg_err,
+				uart_write(uart_desc, msg_err,
 						 sizeof(msg_err) - 1);
 				goto cleanup;
 			}
@@ -623,13 +639,13 @@ static int curve_trace_common(struct no_os_uart_desc *uart_desc,
 			char curveBuffer2[128];
 			sprintf(curveBuffer2,
 				"coll voltage:  %.11f   coll curre:  %.16f\n\r",
-				vc, ic);
-			no_os_uart_write(uart_desc, curveBuffer2,
+				(double)vc, (double)ic);
+			uart_write(uart_desc, curveBuffer2,
 					 strlen(curveBuffer2));
 		}
 
 		char msg_curve_done[] = "\n\r";
-		no_os_uart_write(uart_desc, msg_curve_done,
+		uart_write(uart_desc, msg_curve_done,
 				 sizeof(msg_curve_done) - 1);
 
 		curve_idx++;
@@ -719,14 +735,14 @@ int lm75_example(struct no_os_uart_desc *uart_desc)
 		.i2c_ip = &lm75_i2c_ip,
 	};
 	int ret;
-	uint32_t temp_raw;
+	uint16_t temp_raw;
 	uint32_t temp;
 
 
 	ret = lm75_init(&lm75, &lm75_ip);
 	if (ret) {
 		char msg_err[] = "Failed to read LM75\n\r";
-		no_os_uart_write(uart_desc, msg_err, sizeof(msg_err) - 1);
+		uart_write(uart_desc, msg_err, sizeof(msg_err) - 1);
 		goto cleanup;
 	}
 
@@ -736,18 +752,18 @@ int lm75_example(struct no_os_uart_desc *uart_desc)
 		ret = lm75_read_temperature(lm75, lm75_die_temperature, &temp_raw);
 		if (ret) {
 			char msg_err[] = "Failed to read LM75\n\r";
-			no_os_uart_write(uart_desc, msg_err, sizeof(msg_err) - 1);
+			uart_write(uart_desc, msg_err, sizeof(msg_err) - 1);
 			goto cleanup;
 		}
 		temp = lm75_raw_to_millicelsius(temp_raw); // <- for conversion
 		char temp_msg[64];
 		sprintf(temp_msg, "LM75 Temperature: %d.%d°C (raw=%u)\n\r", temp / 1000,
 			temp % 1000, temp_raw);
-		no_os_uart_write(uart_desc, temp_msg, strlen(temp_msg));
+		uart_write(uart_desc, temp_msg, strlen(temp_msg));
 		no_os_mdelay(100);
 	}
 	char csv_footer[] = "=== LM75 TEST END ===\n\r\n\r";
-	no_os_uart_write(uart_desc, csv_footer, sizeof(csv_footer) - 1);
+	uart_write(uart_desc, csv_footer, sizeof(csv_footer) - 1);
 
 	no_os_mdelay(1000);
 
@@ -773,19 +789,19 @@ int curvetrace_example(void)
 	no_os_mdelay(2000);
 
 	char msg_clear[] = "\e[2J\e[H";
-	no_os_uart_write(uart_desc, msg_clear, sizeof(msg_clear) - 1);
+	uart_write(uart_desc, msg_clear, sizeof(msg_clear) - 1);
 
 	char msg_header[] = "========================================\n\r";
-	no_os_uart_write(uart_desc, msg_header, sizeof(msg_header) - 1);
+	uart_write(uart_desc, msg_header, sizeof(msg_header) - 1);
 	char msg_title[] = "  Dual Device BJT Curve Tracer Demo\n\r";
-	no_os_uart_write(uart_desc, msg_title, sizeof(msg_title) - 1);
-	no_os_uart_write(uart_desc, msg_header, sizeof(msg_header) - 1);
+	uart_write(uart_desc, msg_title, sizeof(msg_title) - 1);
+	uart_write(uart_desc, msg_header, sizeof(msg_header) - 1);
 
 	/* Run AD5592R curve tracer (SPI) */
 	ret = ad5592r_curve_example(uart_desc);
 	if (ret) {
 		char msg_err[] = "\n\rAD5592R curve tracer failed!\n\r";
-		no_os_uart_write(uart_desc, msg_err, sizeof(msg_err) - 1);
+		uart_write(uart_desc, msg_err, sizeof(msg_err) - 1);
 		goto cleanup;
 	}
 
@@ -796,7 +812,7 @@ int curvetrace_example(void)
 	ret = ad5593r_curve_example(uart_desc);
 	if (ret) {
 		char msg_err[] = "\n\rAD5593R curve tracer failed!\n\r";
-		no_os_uart_write(uart_desc, msg_err, sizeof(msg_err) - 1);
+		uart_write(uart_desc, msg_err, sizeof(msg_err) - 1);
 		goto cleanup;
 	}
 
@@ -807,7 +823,7 @@ int curvetrace_example(void)
 	ret = lm75_example(uart_desc);
 	if (ret) {
 		char msg_err[] = "\n\rLM75 failed!\n\r";
-		no_os_uart_write(uart_desc, msg_err, sizeof(msg_err) - 1);
+		uart_write(uart_desc, msg_err, sizeof(msg_err) - 1);
 		goto cleanup;
 	}
 

@@ -3,7 +3,6 @@ INCS += $(PLATFORM_DRIVERS)/maxim_spi.h \
 	$(PLATFORM_DRIVERS)/maxim_irq.h \
 	$(PLATFORM_DRIVERS)/maxim_uart.h \
 	$(PLATFORM_DRIVERS)/maxim_gpio.h \
-	$(PLATFORM_DRIVERS)/maxim_usb_uart.h \
 	$(PLATFORM_DRIVERS)/maxim_timer.h \
 	$(PLATFORM_DRIVERS)/maxim_i2c.h
 
@@ -13,6 +12,10 @@ SRCS += $(PLATFORM_DRIVERS)/maxim_spi.c \
 	$(PLATFORM_DRIVERS)/maxim_uart.c \
 	$(PLATFORM_DRIVERS)/maxim_gpio.c \
 	$(PLATFORM_DRIVERS)/maxim_delay.c \
-	$(PLATFORM_DRIVERS)/maxim_usb_uart.c \
 	$(PLATFORM_DRIVERS)/maxim_timer.c \
 	$(PLATFORM_DRIVERS)/maxim_i2c.c
+
+ifeq ($(NO_OS_USB_UART),y)
+INCS += $(PLATFORM_DRIVERS)/maxim_usb_uart.h
+SRCS += $(PLATFORM_DRIVERS)/maxim_usb_uart.c
+endif
